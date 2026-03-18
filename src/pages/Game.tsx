@@ -87,7 +87,6 @@ export default function Game() {
       }, 15000);
       return () => clearTimeout(timer);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState.currentPhase, gameState.currentQuestionIndex, gameState.settings.timeLimit, nextRound]);
 
   const handleVote = (option: 'A' | 'B') => {

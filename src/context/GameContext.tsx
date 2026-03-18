@@ -1,5 +1,7 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { ref, set, get, update, onValue, push, child } from 'firebase/database';
+import { db } from '../firebase';
 
 // Tipos base para el juego
 export type GameMode = 'libre' | 'tematica';
@@ -19,7 +21,7 @@ export interface Question {
   topic?: string;
   votesA: number;
   votesB: number;
-  // Para guardar quién votó a qué (opcional pero útil)
+  // Para guardar quién votó a qué
   voters?: Record<string, 'A' | 'B'>;
 }
 
@@ -41,20 +43,21 @@ export interface GameState {
   questions: Question[]; // Preguntas de la ronda actual
   currentQuestionIndex: number; // Para la fase de votación
 
-  // Usuario actual
+  // Usuario actual (solo en cliente local)
   currentPlayerId: string | null;
 }
 
 interface GameContextType {
   gameState: GameState;
   createRoom: (playerName: string, settings: GameSettings) => string;
-  joinRoom: (roomId: string, playerName: string) => boolean;
+  joinRoom: (roomId: string, playerName: string) => Promise<boolean>;
   startGame: () => void;
   submitQuestion: (optionA: string, optionB: string, topic?: string) => void;
   submitVote: (questionId: string, option: 'A' | 'B') => void;
   nextQuestion: () => void;
   nextRound: () => void;
   finishGame: () => void;
+  updateSettings: (settings: GameSettings) => void;
 }
 
 const defaultState: GameState = {
@@ -77,219 +80,262 @@ const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const [gameState, setGameState] = useState<GameState>(defaultState);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [localPlayerId, setLocalPlayerId] = useState<string | null>(null);
 
-  // Funciones simuladas
-  const createRoom = (playerName: string, settings: GameSettings) => {
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const hostId = `player_${Math.random().toString(36).substring(2, 9)}`;
+  // Escuchar cambios en la sala actual de Firebase
+  useEffect(() => {
+    if (!activeRoomId) return;
 
-    setGameState({
-      ...defaultState,
-      roomId,
-      settings,
-      players: [{ id: hostId, name: playerName, isHost: true, score: 0 }],
-      currentPlayerId: hostId,
+    const roomRef = ref(db, `rooms/${activeRoomId}`);
+
+    const unsubscribe = onValue(roomRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+
+        // Convertir diccionarios de Firebase a arrays para el state local
+        const playersArray: Player[] = data.players
+          ? Object.keys(data.players).map(k => ({ id: k, ...data.players[k] }))
+          : [];
+
+        const questionsArray: Question[] = data.questions
+          ? Object.keys(data.questions).map(k => ({ id: k, ...data.questions[k] }))
+          : [];
+
+        // Si todos mandaron la pregunta y estamos en writing, pasar a voting automáticamente
+        // Solo el host hace este check para evitar condiciones de carrera
+        const isHost = playersArray.find(p => p.id === localPlayerId)?.isHost;
+        if (isHost && data.currentPhase === 'writing' && playersArray.length > 0 && questionsArray.length >= playersArray.length) {
+          // Double check to make sure all expected votes are 0, avoiding issues if re-entering writing phase
+          update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 });
+        }
+
+        // Si todos ya votaron en la pregunta actual, pasar automáticamente a la siguiente pregunta
+        // Solo el host hace este check para evitar condiciones de carrera
+        if (isHost && data.currentPhase === 'voting' && questionsArray.length > 0) {
+          const currentQ = questionsArray[data.currentQuestionIndex || 0];
+          if (currentQ) {
+            const expectedVotes = playersArray.length - 1;
+            const currentVotes = (currentQ.votesA || 0) + (currentQ.votesB || 0);
+
+            if (expectedVotes > 0 && currentVotes >= expectedVotes) {
+              if ((data.currentQuestionIndex || 0) < questionsArray.length - 1) {
+                update(ref(db, `rooms/${activeRoomId}`), { currentQuestionIndex: (data.currentQuestionIndex || 0) + 1 });
+              } else {
+                update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'round_ranking' });
+              }
+            }
+          }
+        }
+
+        setGameState({
+          roomId: activeRoomId,
+          players: playersArray,
+          settings: data.settings || defaultState.settings,
+          currentPhase: data.currentPhase || 'waiting',
+          currentRound: data.currentRound || 1,
+          questions: questionsArray,
+          currentQuestionIndex: data.currentQuestionIndex || 0,
+          currentPlayerId: localPlayerId,
+        });
+      } else {
+        // La sala dejó de existir o fue eliminada
+        setGameState(defaultState);
+        setActiveRoomId(null);
+        setLocalPlayerId(null);
+      }
     });
 
-    return roomId;
-  };
+    return () => unsubscribe();
+  }, [activeRoomId, localPlayerId]);
 
-  const joinRoom = (roomId: string, playerName: string) => {
-    const newPlayerId = `player_${Math.random().toString(36).substring(2, 9)}`;
+  // Funciones de acción que actualizan Firebase
+  const createRoom = (playerName: string, settings: GameSettings) => {
+    // Generar ID de 6 letras mayúsculas
+    const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const newPlayerId = push(child(ref(db), 'rooms')).key as string; // Generar un ID único para el jugador
 
+    const roomRef = ref(db, `rooms/${newRoomId}`);
+
+    // Configurar estado inicial en DB
+    set(roomRef, {
+      settings,
+      currentPhase: 'waiting',
+      currentRound: 1,
+      currentQuestionIndex: 0,
+      players: {
+        [newPlayerId]: {
+          name: playerName,
+          isHost: true,
+          score: 0
+        }
+      }
+    });
+
+    setLocalPlayerId(newPlayerId);
+    setActiveRoomId(newRoomId);
+
+    // Setear optimísticamente el local state (el listener lo sobreescribirá)
     setGameState(prev => ({
       ...prev,
-      roomId,
-      players: [...prev.players, { id: newPlayerId, name: playerName, isHost: false, score: 0 }],
-      currentPlayerId: newPlayerId,
+      roomId: newRoomId,
+      settings,
+      players: [{ id: newPlayerId, name: playerName, isHost: true, score: 0 }],
+      currentPlayerId: newPlayerId
     }));
 
-    return true; // Éxito
+    return newRoomId;
+  };
+
+  const joinRoom = async (roomId: string, playerName: string): Promise<boolean> => {
+    const roomRef = ref(db, `rooms/${roomId}`);
+    const snapshot = await get(roomRef);
+
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      if (data.currentPhase !== 'waiting') {
+        alert("La partida ya comenzó");
+        return false;
+      }
+
+      const newPlayerId = push(child(ref(db), 'rooms')).key as string;
+
+      await update(ref(db, `rooms/${roomId}/players`), {
+        [newPlayerId]: {
+          name: playerName,
+          isHost: false,
+          score: 0
+        }
+      });
+
+      setLocalPlayerId(newPlayerId);
+      setActiveRoomId(roomId);
+      return true;
+    }
+
+    alert("La sala no existe");
+    return false;
+  };
+
+  const updateSettings = (settings: GameSettings) => {
+    if (!activeRoomId) return;
+    update(ref(db, `rooms/${activeRoomId}`), { settings });
   };
 
   const startGame = () => {
-    setGameState(prev => ({ ...prev, currentPhase: 'writing' }));
+    if (!activeRoomId) return;
+    update(ref(db, `rooms/${activeRoomId}`), {
+      currentPhase: 'writing',
+      questions: null // Limpiar preguntas si hubiera
+    });
   };
 
   const submitQuestion = (optionA: string, optionB: string, topic?: string) => {
-    if (!gameState.currentPlayerId) return;
+    if (!activeRoomId || !localPlayerId) return;
 
-    const newQuestion: Question = {
-      id: `q_${Math.random().toString(36).substring(2, 9)}`,
-      authorId: gameState.currentPlayerId,
+    const questionsRef = ref(db, `rooms/${activeRoomId}/questions`);
+    const newQuestionRef = push(questionsRef);
+
+    set(newQuestionRef, {
+      authorId: localPlayerId,
       optionA,
       optionB,
-      topic,
+      topic: topic || null,
       votesA: 0,
-      votesB: 0,
-      voters: {}
-    };
-
-    setGameState(prev => {
-      const updatedQuestions = [...prev.questions, newQuestion];
-
-      // MOCK: Generar preguntas automáticas para los bots para que se pueda testear la votación
-      const botPlayers = prev.players.filter(p => p.id !== gameState.currentPlayerId);
-
-      botPlayers.forEach((bot) => {
-        // Solo generamos si no generó ya
-        if (!updatedQuestions.find(q => q.authorId === bot.id)) {
-          updatedQuestions.push({
-            id: `q_bot_${bot.id}_${Math.random().toString(36).substring(2, 6)}`,
-            authorId: bot.id,
-            optionA: `Opción A de ${bot.name} (Simulada)`,
-            optionB: `Opción B de ${bot.name} (Simulada)`,
-            topic,
-            votesA: 0,
-            votesB: 0,
-            voters: {}
-          });
-        }
-      });
-
-      return {
-        ...prev,
-        questions: updatedQuestions,
-        // En simulación, al enviar el único jugador humano pasamos a votación,
-        // (En la realidad sería al enviar todos)
-      };
+      votesB: 0
     });
   };
 
-  const submitVote = (questionId: string, option: 'A' | 'B') => {
-    if (!gameState.currentPlayerId) return;
+  const submitVote = async (questionId: string, option: 'A' | 'B') => {
+    if (!activeRoomId || !localPlayerId) return;
 
-    setGameState(prev => {
-      const updatedQuestions = prev.questions.map(q => {
-        if (q.id === questionId) {
-          const isA = option === 'A';
-          return {
-            ...q,
-            votesA: isA ? q.votesA + 1 : q.votesA,
-            votesB: !isA ? q.votesB + 1 : q.votesB,
-            voters: {
-              ...q.voters,
-              [prev.currentPlayerId!]: option
-            }
-          };
-        }
-        return q;
-      });
+    const questionRef = ref(db, `rooms/${activeRoomId}/questions/${questionId}`);
+    const snapshot = await get(questionRef);
 
-      return { ...prev, questions: updatedQuestions };
-    });
+    if (snapshot.exists()) {
+      const questionData = snapshot.val();
+
+      // Si el usuario ya votó, no permitir
+      if (questionData.voters && questionData.voters[localPlayerId]) {
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const updates: Record<string, any> = {};
+
+      if (option === 'A') {
+        updates['votesA'] = (questionData.votesA || 0) + 1;
+      } else {
+        updates['votesB'] = (questionData.votesB || 0) + 1;
+      }
+
+      // Registrar que este usuario votó por A o B
+      updates[`voters/${localPlayerId}`] = option;
+
+      await update(questionRef, updates);
+    }
   };
 
   const nextQuestion = () => {
-    setGameState(prev => {
-      // MOCK: Generar votos aleatorios de los bots antes de pasar a la siguiente pregunta
-      const currentQ = prev.questions[prev.currentQuestionIndex];
-      const botPlayers = prev.players.filter(p => p.id !== prev.currentPlayerId);
+    if (!activeRoomId) return;
 
-      const updatedQuestions = [...prev.questions];
+    if (gameState.currentQuestionIndex < gameState.questions.length - 1) {
+      update(ref(db, `rooms/${activeRoomId}`), {
+        currentQuestionIndex: gameState.currentQuestionIndex + 1
+      });
+    } else {
+      update(ref(db, `rooms/${activeRoomId}`), {
+        currentPhase: 'round_ranking'
+      });
+    }
+  };
 
-      if (currentQ) {
-        const qIndex = prev.currentQuestionIndex;
-        let vA = updatedQuestions[qIndex].votesA;
-        let vB = updatedQuestions[qIndex].votesB;
+  const nextRound = async () => {
+    if (!activeRoomId) return;
 
-        botPlayers.forEach(bot => {
-          // El autor no vota
-          if (bot.id === currentQ.authorId) return;
-          // Si el bot no votó ya
-          if (!updatedQuestions[qIndex].voters || !updatedQuestions[qIndex].voters[bot.id]) {
-            const voteForA = Math.random() > 0.5;
-            if (voteForA) vA++; else vB++;
+    // 1. Calculate scores
+    const roomRef = ref(db, `rooms/${activeRoomId}`);
+    const snapshot = await get(roomRef);
 
-            updatedQuestions[qIndex] = {
-              ...updatedQuestions[qIndex],
-              votesA: vA,
-              votesB: vB,
-              voters: {
-                ...(updatedQuestions[qIndex].voters || {}),
-                [bot.id]: voteForA ? 'A' : 'B'
-              }
-            };
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const updates: Record<string, any> = {};
+
+      if (data.questions) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Object.values(data.questions).forEach((q: any) => {
+          const totalVotes = (q.votesA || 0) + (q.votesB || 0);
+          if (totalVotes > 0) {
+            const percentA = (q.votesA / totalVotes) * 100;
+            const diff = Math.abs(percentA - 50) * 2;
+            const points = Math.round(1000 * ((100 - diff) / 100));
+
+            // Asignar puntos al autor
+            const currentScore = data.players[q.authorId]?.score || 0;
+            updates[`players/${q.authorId}/score`] = currentScore + points;
           }
         });
       }
 
-      if (prev.currentQuestionIndex < prev.questions.length - 1) {
-        return { ...prev, questions: updatedQuestions, currentQuestionIndex: prev.currentQuestionIndex + 1 };
+      // 2. Prepare next round or finish
+      if (data.currentRound < data.settings.rounds) {
+        updates['currentRound'] = data.currentRound + 1;
+        updates['currentPhase'] = 'writing';
+        updates['currentQuestionIndex'] = 0;
+        updates['questions'] = null; // Limpiar preguntas de la ronda anterior
       } else {
-        return { ...prev, questions: updatedQuestions, currentPhase: 'round_ranking' };
+        updates['currentPhase'] = 'finished';
       }
-    });
-  };
 
-  const nextRound = () => {
-    setGameState(prev => {
-      // 1. Calculate and update scores before moving to the next round
-      const updatedPlayers = [...prev.players];
-
-      prev.questions.forEach(q => {
-        const totalVotes = q.votesA + q.votesB;
-        if (totalVotes === 0) return; // Nadie votó
-
-        // Porcentaje de A (0 a 100)
-        const percentA = (q.votesA / totalVotes) * 100;
-
-        // El peor caso es 100% / 0% (diferencia de 100).
-        // El mejor caso es 50% / 50% (diferencia de 0).
-        const diff = Math.abs(percentA - 50) * 2; // de 0 (perfecto) a 100 (pésimo)
-
-        // Función continua: puntos máximos = 1000
-        const points = Math.round(1000 * ((100 - diff) / 100));
-
-        // Asignar puntos al autor
-        const authorIndex = updatedPlayers.findIndex(p => p.id === q.authorId);
-        if (authorIndex !== -1) {
-          updatedPlayers[authorIndex].score += points;
-        }
-      });
-
-      if (prev.currentRound < prev.settings.rounds) {
-        return {
-          ...prev,
-          players: updatedPlayers,
-          currentRound: prev.currentRound + 1,
-          currentPhase: 'writing',
-          questions: [],
-          currentQuestionIndex: 0,
-        };
-      } else {
-        return { ...prev, players: updatedPlayers, currentPhase: 'finished' };
-      }
-    });
+      await update(roomRef, updates);
+    }
   };
 
   const finishGame = () => {
-    setGameState(prev => ({ ...prev, currentPhase: 'finished' }));
+    if (!activeRoomId) return;
+    update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'finished' });
   };
-
-  const _forcePhase = (phase: GamePhase) => {
-    setGameState(prev => ({ ...prev, currentPhase: phase }));
-  };
-
-  // Simular la llegada de jugadores extra para pruebas
-  const __mockAddPlayer = () => {
-    const id = `player_${Math.random().toString(36).substring(2, 9)}`;
-    const names = ['Ana', 'Carlos', 'Lucía', 'Marcos', 'Elena', 'Diego'];
-    const randomName = names[Math.floor(Math.random() * names.length)];
-
-    setGameState(prev => ({
-      ...prev,
-      players: [...prev.players, { id, name: randomName, isHost: false, score: 0 }]
-    }));
-  };
-
-  // Exponemos el mock en window para testear fácil desde la consola
-  if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__mockAddPlayer = __mockAddPlayer;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).gameState = gameState;
-  }
 
   return (
     <GameContext.Provider value={{
@@ -302,8 +348,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       nextQuestion,
       nextRound,
       finishGame,
-      _forcePhase // Para testeo rápido en frontend
-    } as GameContextType & { _forcePhase: (p: GamePhase) => void }}>
+      updateSettings
+    }}>
       {children}
     </GameContext.Provider>
   );
