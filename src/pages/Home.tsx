@@ -21,7 +21,7 @@ export default function Home() {
     setSelectedAction(action);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!playerName.trim()) return;
 
@@ -38,8 +38,10 @@ export default function Home() {
 
     } else if (selectedAction === 'join') {
       if (!roomCode.trim()) return;
-      joinRoom(roomCode.toUpperCase(), playerName);
-      navigate(`/lobby/${roomCode.toUpperCase()}`);
+      const success = await joinRoom(roomCode.toUpperCase(), playerName);
+      if (success) {
+        navigate(`/lobby/${roomCode.toUpperCase()}`);
+      }
     }
   };
 

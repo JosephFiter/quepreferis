@@ -6,7 +6,7 @@ import { Clock, Send, CheckCircle2, AlertTriangle } from 'lucide-react';
 export default function Game() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
-  const { gameState, submitQuestion, submitVote, nextQuestion, nextRound } = useGame();
+  const { gameState, submitQuestion, submitVote, nextQuestion, nextRound, forceNextPhase } = useGame();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const gameContext = useGame() as any; // Para acceder a _forcePhase
 
@@ -47,8 +47,12 @@ export default function Game() {
     if (gameState.currentPhase === 'writing' && !isSubmitted) {
       handleSubmitQuestion();
     } else if (gameState.currentPhase === 'voting' && !selectedVote) {
-      // Si no votó, pasamos igual
-      nextQuestion();
+      // Registrar que no votó enviando una actualización vacía a DB
+      // Pero mejor, dejar que forceNextPhase mueva la fase si el tiempo se acabó
+      const isHost = gameState.players.find(p => p.id === gameState.currentPlayerId)?.isHost;
+      if (isHost) {
+        forceNextPhase();
+      }
     }
   };
 

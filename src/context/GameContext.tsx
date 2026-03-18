@@ -58,6 +58,7 @@ interface GameContextType {
   nextRound: () => void;
   finishGame: () => void;
   updateSettings: (settings: GameSettings) => void;
+  forceNextPhase: () => void;
 }
 
 const defaultState: GameState = {
@@ -349,6 +350,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
     update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'finished' });
   };
 
+  const forceNextPhase = () => {
+    if (!activeRoomId) return;
+    if (gameState.currentPhase === 'writing') {
+      update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 });
+    } else if (gameState.currentPhase === 'voting') {
+      if (gameState.currentQuestionIndex < gameState.questions.length - 1) {
+        update(ref(db, `rooms/${activeRoomId}`), { currentQuestionIndex: gameState.currentQuestionIndex + 1 });
+      } else {
+        update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'round_ranking' });
+      }
+    }
+  };
+
   return (
     <GameContext.Provider value={{
       gameState,
@@ -360,7 +374,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       nextQuestion,
       nextRound,
       finishGame,
-      updateSettings
+      updateSettings,
+      forceNextPhase
     }}>
       {children}
     </GameContext.Provider>

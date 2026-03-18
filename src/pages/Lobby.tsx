@@ -48,7 +48,18 @@ export default function Lobby() {
   const handleStartGame = () => {
     // Sincronizar configuraciones en Firebase justo antes de iniciar
     if (isHost) {
-      updateSettings(settings);
+      const finalSettings = { ...settings };
+      // Si la cantidad de temas es menor a la cantidad de rondas,
+      // repetir los temas aleatoriamente hasta llenar las rondas
+      if (finalSettings.mode === 'tematica' && finalSettings.topics.length > 0 && finalSettings.topics.length < finalSettings.rounds) {
+        const topics = [...finalSettings.topics];
+        while (topics.length < finalSettings.rounds) {
+          const randomTopic = finalSettings.topics[Math.floor(Math.random() * finalSettings.topics.length)];
+          topics.push(randomTopic);
+        }
+        finalSettings.topics = topics;
+      }
+      updateSettings(finalSettings);
     }
     startGame();
   };
