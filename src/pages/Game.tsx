@@ -44,11 +44,18 @@ export default function Game() {
   };
 
   const handleTimeUp = () => {
-    if (gameState.currentPhase === 'writing' && !isSubmitted) {
-      handleSubmitQuestion();
-    } else if (gameState.currentPhase === 'voting' && !selectedVote) {
-      // Registrar que no votó enviando una actualización vacía a DB
-      // Pero mejor, dejar que forceNextPhase mueva la fase si el tiempo se acabó
+    if (gameState.currentPhase === 'writing') {
+      if (!isSubmitted) {
+        handleSubmitQuestion();
+      }
+      // El Host fuerza la siguiente fase luego de unos instantes (si todos no hubieran enviado ya)
+      const isHost = gameState.players.find(p => p.id === gameState.currentPlayerId)?.isHost;
+      if (isHost) {
+        setTimeout(() => {
+          forceNextPhase();
+        }, 2000); // 2 segundos para dar tiempo a los demás a subir su last-second question
+      }
+    } else if (gameState.currentPhase === 'voting') {
       const isHost = gameState.players.find(p => p.id === gameState.currentPlayerId)?.isHost;
       if (isHost) {
         forceNextPhase();

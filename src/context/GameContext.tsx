@@ -363,6 +363,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  useEffect(() => {
+    // Exponemos el estado a window para debuguear fácilmente desde consola
+    if (typeof window !== 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).gameState = gameState;
+    }
+  }, [gameState]);
+
   return (
     <GameContext.Provider value={{
       gameState,
