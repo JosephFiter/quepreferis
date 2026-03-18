@@ -44,21 +44,34 @@ export default function Game() {
   };
 
   const handleTimeUp = () => {
+    console.log(`[TIMER] El tiempo llegó a 0 en la fase: ${gameState.currentPhase}`);
+
     if (gameState.currentPhase === 'writing') {
       if (!isSubmitted) {
+        console.log(`[TIMER] Tiempo acabado y NO se había enviado pregunta. Autocompletando y enviando...`);
         handleSubmitQuestion();
+      } else {
+        console.log(`[TIMER] Tiempo acabado, pero la pregunta ya estaba enviada.`);
       }
+
       // El Host fuerza la siguiente fase luego de unos instantes (si todos no hubieran enviado ya)
       const isHost = gameState.players.find(p => p.id === gameState.currentPlayerId)?.isHost;
       if (isHost) {
+        console.log(`[TIMER] Soy el Host. Dando 2 segundos extra antes de forzar el paso a votación.`);
         setTimeout(() => {
+          console.log(`[TIMER] Han pasado los 2 segundos extra. Forzando a votación.`);
           forceNextPhase();
         }, 2000); // 2 segundos para dar tiempo a los demás a subir su last-second question
+      } else {
+        console.log(`[TIMER] NO soy el Host. Esperando a que el Host cambie la fase en Firebase.`);
       }
     } else if (gameState.currentPhase === 'voting') {
       const isHost = gameState.players.find(p => p.id === gameState.currentPlayerId)?.isHost;
       if (isHost) {
+        console.log(`[TIMER] Soy el Host. Forzando paso a la siguiente pregunta/fase.`);
         forceNextPhase();
+      } else {
+        console.log(`[TIMER] NO soy el Host. Esperando a que el Host pase la pregunta de votación.`);
       }
     }
   };

@@ -109,10 +109,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
           topics: data.settings?.topics || []
         };
 
+        // ====== DEBUGEANDO =======
+        if (data.currentPhase === 'writing') {
+          console.log(`[STATE SYNC] Fase actual: writing. Preguntas subidas: ${questionsArray.length} de ${playersArray.length} jugadores en la sala.`);
+        }
+
         // Si todos mandaron la pregunta y estamos en writing, pasar a voting automáticamente
         // Permitimos que cualquier cliente haga el update ya que Firebase maneja bien actualizaciones concurrentes idempotentes.
         // Esto previene que el juego se trabe si el host original se desconecta.
         if (data.currentPhase === 'writing' && playersArray.length > 0 && questionsArray.length >= playersArray.length) {
+          console.log(`[STATE SYNC] ¡Todos enviaron! Cambiando la fase en Firebase a 'voting'...`);
           update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 });
         }
 
@@ -246,6 +252,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const submitQuestion = (optionA: string, optionB: string, topic?: string) => {
     if (!activeRoomId || !localPlayerId) return;
 
+    console.log(`[ACTION] Usuario ${localPlayerId} enviando su "Qué preferís": A(${optionA}), B(${optionB})`);
+
     const questionsRef = ref(db, `rooms/${activeRoomId}/questions`);
     const newQuestionRef = push(questionsRef);
 
@@ -352,6 +360,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const forceNextPhase = () => {
     if (!activeRoomId) return;
+    console.log(`[ACTION] forceNextPhase convocado. Fase actual en mi cliente es: ${gameState.currentPhase}`);
     if (gameState.currentPhase === 'writing') {
       update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 });
     } else if (gameState.currentPhase === 'voting') {
