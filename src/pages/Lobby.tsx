@@ -6,7 +6,7 @@ import { Settings, Users, Copy, CheckCircle2, Play, Plus, X } from 'lucide-react
 export default function Lobby() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
-  const { gameState, startGame } = useGame();
+  const { gameState, startGame, updateSettings } = useGame();
 
   const currentPlayer = gameState.players.find(p => p.id === gameState.currentPlayerId);
   const isHost = currentPlayer?.isHost || false;
@@ -16,7 +16,7 @@ export default function Lobby() {
     mode: gameState.settings.mode,
     rounds: gameState.settings.rounds,
     timeLimit: gameState.settings.timeLimit,
-    topics: gameState.settings.topics,
+    topics: gameState.settings.topics || [],
   });
 
   const [newTopic, setNewTopic] = useState('');
@@ -46,6 +46,10 @@ export default function Lobby() {
   };
 
   const handleStartGame = () => {
+    // Sincronizar configuraciones en Firebase justo antes de iniciar
+    if (isHost) {
+      updateSettings(settings);
+    }
     startGame();
   };
 

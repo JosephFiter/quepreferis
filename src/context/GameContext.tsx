@@ -102,17 +102,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
           ? Object.keys(data.questions).map(k => ({ id: k, ...data.questions[k] }))
           : [];
 
+        // Asegurarse de que topics siempre sea un array
+        const safeSettings = {
+          ...(data.settings || defaultState.settings),
+          topics: data.settings?.topics || []
+        };
+
         // Si todos mandaron la pregunta y estamos en writing, pasar a voting automáticamente
-        // Solo el host hace este check para evitar condiciones de carrera
-        const isHost = playersArray.find(p => p.id === localPlayerId)?.isHost;
-        if (isHost && data.currentPhase === 'writing' && playersArray.length > 0 && questionsArray.length >= playersArray.length) {
-          // Double check to make sure all expected votes are 0, avoiding issues if re-entering writing phase
+        // Permitimos que cualquier cliente haga el update ya que Firebase maneja bien actualizaciones concurrentes idempotentes.
+        // Esto previene que el juego se trabe si el host original se desconecta.
+        if (data.currentPhase === 'writing' && playersArray.length > 0 && questionsArray.length >= playersArray.length) {
           update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 });
         }
 
         // Si todos ya votaron en la pregunta actual, pasar automáticamente a la siguiente pregunta
-        // Solo el host hace este check para evitar condiciones de carrera
-        if (isHost && data.currentPhase === 'voting' && questionsArray.length > 0) {
+        if (data.currentPhase === 'voting' && questionsArray.length > 0) {
           const currentQ = questionsArray[data.currentQuestionIndex || 0];
           if (currentQ) {
             const expectedVotes = playersArray.length - 1;
@@ -131,7 +135,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         setGameState({
           roomId: activeRoomId,
           players: playersArray,
-          settings: data.settings || defaultState.settings,
+          settings: safeSettings,
           currentPhase: data.currentPhase || 'waiting',
           currentRound: data.currentRound || 1,
           questions: questionsArray,
@@ -210,6 +214,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       setLocalPlayerId(newPlayerId);
       setActiveRoomId(roomId);
+
+      // Actualización optimista para evitar ser redirigido a Home antes de que Firebase responda
+      setGameState(prev => ({
+        ...prev,
+        roomId,
+        currentPlayerId: newPlayerId
+      }));
+
       return true;
     }
 
