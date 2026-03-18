@@ -83,7 +83,6 @@ export default function Game() {
         setTimeLeft(prev => {
           if (prev <= 1) {
             clearInterval(timer);
-            handleTimeUp();
             return 0;
           }
           return prev - 1;
@@ -91,8 +90,15 @@ export default function Game() {
       }, 1000);
       return () => clearInterval(timer);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.currentPhase, isSubmitted, selectedVote]);
+  }, [gameState.currentPhase]);
+
+  // Vigilar cuándo el tiempo llega a 0 para ejecutar la lógica una sola vez
+  useEffect(() => {
+    if (timeLeft === 0) {
+      handleTimeUp();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft]);
 
   // Resetear estados al cambiar de fase
   useEffect(() => {

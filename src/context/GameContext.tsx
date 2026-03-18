@@ -114,31 +114,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
           console.log(`[STATE SYNC] Fase actual: writing. Preguntas subidas: ${questionsArray.length} de ${playersArray.length} jugadores en la sala.`);
         }
 
-        // Si todos mandaron la pregunta y estamos en writing, pasar a voting automáticamente
-        // Permitimos que cualquier cliente haga el update ya que Firebase maneja bien actualizaciones concurrentes idempotentes.
-        // Esto previene que el juego se trabe si el host original se desconecta.
-        if (data.currentPhase === 'writing' && playersArray.length > 0 && questionsArray.length >= playersArray.length) {
-          console.log(`[STATE SYNC] ¡Todos enviaron! Cambiando la fase en Firebase a 'voting'...`);
-          update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 });
-        }
-
-        // Si todos ya votaron en la pregunta actual, pasar automáticamente a la siguiente pregunta
-        if (data.currentPhase === 'voting' && questionsArray.length > 0) {
-          const currentQ = questionsArray[data.currentQuestionIndex || 0];
-          if (currentQ) {
-            const expectedVotes = playersArray.length - 1;
-            const currentVotes = (currentQ.votesA || 0) + (currentQ.votesB || 0);
-
-            if (expectedVotes > 0 && currentVotes >= expectedVotes) {
-              if ((data.currentQuestionIndex || 0) < questionsArray.length - 1) {
-                update(ref(db, `rooms/${activeRoomId}`), { currentQuestionIndex: (data.currentQuestionIndex || 0) + 1 });
-              } else {
-                update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'round_ranking' });
-              }
-            }
-          }
-        }
-
         setGameState({
           roomId: activeRoomId,
           players: playersArray,
@@ -362,15 +337,53 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!activeRoomId) return;
     console.log(`[ACTION] forceNextPhase convocado. Fase actual en mi cliente es: ${gameState.currentPhase}`);
     if (gameState.currentPhase === 'writing') {
-      update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 });
+      update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 }).catch(e => console.error(e));
     } else if (gameState.currentPhase === 'voting') {
       if (gameState.currentQuestionIndex < gameState.questions.length - 1) {
-        update(ref(db, `rooms/${activeRoomId}`), { currentQuestionIndex: gameState.currentQuestionIndex + 1 });
+        update(ref(db, `rooms/${activeRoomId}`), { currentQuestionIndex: gameState.currentQuestionIndex + 1 }).catch(e => console.error(e));
       } else {
-        update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'round_ranking' });
+        update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'round_ranking' }).catch(e => console.error(e));
       }
     }
   };
+
+  // Lógica de transición automática de fases manejada EXCLUSIVAMENTE por el host
+  useEffect(() => {
+    const currentPlayer = gameState.players.find(p => p.id === gameState.currentPlayerId);
+    const isHost = currentPlayer?.isHost || false;
+
+    if (!activeRoomId || !isHost) return;
+
+    if (gameState.currentPhase === 'writing') {
+      if (gameState.players.length > 0 && gameState.questions.length >= gameState.players.length) {
+        console.log(`[HOST LOGIC] ¡Todos enviaron! Cambiando la fase en Firebase a 'voting'...`);
+        update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 }).catch(e => console.error("Error updating firebase:", e));
+      }
+    } else if (gameState.currentPhase === 'voting' && gameState.questions.length > 0) {
+      const currentQ = gameState.questions[gameState.currentQuestionIndex || 0];
+      if (currentQ) {
+        const expectedVotes = gameState.players.length - 1;
+        const currentVotes = (currentQ.votesA || 0) + (currentQ.votesB || 0);
+
+        if (expectedVotes > 0 && currentVotes >= expectedVotes) {
+          if (gameState.currentQuestionIndex < gameState.questions.length - 1) {
+            console.log(`[HOST LOGIC] Todos votaron en la pregunta actual. Pasando a la siguiente...`);
+            update(ref(db, `rooms/${activeRoomId}`), { currentQuestionIndex: gameState.currentQuestionIndex + 1 }).catch(e => console.error(e));
+          } else {
+            console.log(`[HOST LOGIC] Todos votaron en la ÚLTIMA pregunta. Pasando a round_ranking...`);
+            update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'round_ranking' }).catch(e => console.error(e));
+          }
+        }
+      }
+    }
+  }, [
+    activeRoomId,
+    gameState.currentPhase,
+    gameState.questions,
+    gameState.players,
+    gameState.currentQuestionIndex,
+    gameState.currentPlayerId
+  ]);
 
   useEffect(() => {
     // Exponemos el estado a window para debuguear fácilmente desde consola
