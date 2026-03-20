@@ -450,30 +450,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
           phaseEndTime: Date.now() + votingTimeMs
         }).catch(e => console.error("Error updating firebase:", e));
       }
-    } else if (gameState.currentPhase === 'voting' && gameState.questions.length > 0) {
-      const currentQ = gameState.questions[gameState.currentQuestionIndex || 0];
-      if (currentQ) {
-        const expectedVotes = gameState.players.length - 1;
-        const currentVotes = (currentQ.votesA || 0) + (currentQ.votesB || 0);
-
-        if (expectedVotes > 0 && currentVotes >= expectedVotes) {
-          if (gameState.currentQuestionIndex < gameState.questions.length - 1) {
-            console.log(`[HOST LOGIC] Todos votaron en la pregunta actual. Pasando a la siguiente...`);
-            const votingTimeMs = 15000;
-            update(ref(db, `rooms/${activeRoomId}`), {
-              currentQuestionIndex: gameState.currentQuestionIndex + 1,
-              phaseEndTime: Date.now() + votingTimeMs
-            }).catch(e => console.error(e));
-          } else {
-            console.log(`[HOST LOGIC] Todos votaron en la ÚLTIMA pregunta. Pasando a round_ranking...`);
-            update(ref(db, `rooms/${activeRoomId}`), {
-              currentPhase: 'round_ranking',
-              phaseEndTime: null
-            }).catch(e => console.error(e));
-          }
-        }
-      }
     }
+    // NOTA: Se eliminó la lógica que avanzaba automáticamente la fase de "voting" si todos votaban.
+    // Ahora, la fase de votación SIEMPRE espera a que el timer llegue a 0 (lo cual ejecutará forceNextPhase).
+
   }, [
     activeRoomId,
     gameState.currentPhase,
