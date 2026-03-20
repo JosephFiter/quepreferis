@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, UserPlus, Zap, Eye, ArrowRight } from 'lucide-react';
+import { Users, UserPlus, Zap, Eye, ArrowRight, Palette } from 'lucide-react';
 import { useGame } from '../context/GameContext';
+import { useTheme } from '../context/ThemeContext';
 
 type ActionType = 'create' | 'join' | 'quick' | 'spectate' | null;
 
 export default function Home() {
   const navigate = useNavigate();
   const { createRoom, joinRoom } = useGame();
+  const { theme, setTheme } = useTheme();
 
   const [selectedAction, setSelectedAction] = useState<ActionType>(null);
   const [playerName, setPlayerName] = useState('');
@@ -51,69 +53,87 @@ export default function Home() {
     setRoomCode('');
   };
 
+  const toggleTheme = () => {
+    const themes: ('dark-purple' | 'light-blue' | 'monochrome' | 'neon-green')[] = ['dark-purple', 'light-blue', 'monochrome', 'neon-green'];
+    const currentIndex = themes.indexOf(theme);
+    const nextIndex = (currentIndex + 1) % themes.length;
+    setTheme(themes[nextIndex]);
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center flex-grow p-4 w-full max-w-md mx-auto">
-      <div className="text-center mb-10">
-        <h1 className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 mb-2">
+    <div className="flex flex-col items-center justify-center flex-grow p-4 w-full max-w-md mx-auto relative">
+
+      {/* Botón temporal de cambio de tema */}
+      <button
+        onClick={toggleTheme}
+        className="absolute top-0 right-0 p-3 bg-panel border border-border-color rounded-full text-text-secondary hover:text-primary transition-colors shadow-lg flex items-center gap-2"
+        title="Cambiar Paleta de Colores"
+      >
+        <Palette size={20} />
+        <span className="text-xs font-bold hidden md:inline">Tema: {theme}</span>
+      </button>
+
+      <div className="text-center mb-10 mt-12 md:mt-0">
+        <h1 className="text-5xl font-extrabold text-primary mb-2 transition-colors">
           ¿Qué preferís?
         </h1>
-        <p className="text-neutral-400">El juego de los peores dilemas</p>
+        <p className="text-text-secondary transition-colors">El juego de los peores dilemas</p>
       </div>
 
       {!selectedAction ? (
         <div className="w-full flex flex-col gap-4">
           <button
             onClick={() => handleActionClick('create')}
-            className="group flex items-center justify-between p-4 bg-neutral-800 border border-neutral-700 hover:border-purple-500 rounded-xl transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+            className="group flex items-center justify-between p-4 bg-panel border border-border-color hover:border-primary rounded-xl transition-all shadow-md"
           >
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-500/20 text-purple-400 rounded-lg">
+              <div className="p-2 bg-primary/20 text-primary rounded-lg transition-colors">
                 <Users size={24} />
               </div>
-              <span className="font-semibold text-lg">Crear lobby privado</span>
+              <span className="font-semibold text-lg text-text-primary">Crear lobby privado</span>
             </div>
-            <ArrowRight className="text-neutral-500 group-hover:text-purple-400 transition-colors" />
+            <ArrowRight className="text-text-secondary group-hover:text-primary transition-colors" />
           </button>
 
           <button
             onClick={() => handleActionClick('join')}
-            className="group flex items-center justify-between p-4 bg-neutral-800 border border-neutral-700 hover:border-blue-500 rounded-xl transition-all hover:shadow-[0_0_15px_rgba(59,130,246,0.4)]"
+            className="group flex items-center justify-between p-4 bg-panel border border-border-color hover:border-secondary rounded-xl transition-all shadow-md"
           >
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg">
+              <div className="p-2 bg-secondary/20 text-secondary rounded-lg transition-colors">
                 <UserPlus size={24} />
               </div>
-              <span className="font-semibold text-lg">Entrar lobby privado</span>
+              <span className="font-semibold text-lg text-text-primary">Entrar lobby privado</span>
             </div>
-            <ArrowRight className="text-neutral-500 group-hover:text-blue-400 transition-colors" />
+            <ArrowRight className="text-text-secondary group-hover:text-secondary transition-colors" />
           </button>
 
           <button
             onClick={() => handleActionClick('quick')}
-            className="group flex items-center justify-between p-4 bg-neutral-800/50 border border-neutral-800 opacity-60 cursor-not-allowed rounded-xl transition-all"
+            className="group flex items-center justify-between p-4 bg-panel border border-border-color opacity-60 cursor-not-allowed rounded-xl transition-all shadow-sm"
           >
             <div className="flex items-center gap-3">
               <div className="p-2 bg-yellow-500/20 text-yellow-500 rounded-lg">
                 <Zap size={24} />
               </div>
               <div className="flex flex-col items-start">
-                <span className="font-semibold text-lg text-neutral-400">Juego rápido</span>
-                <span className="text-xs text-neutral-500">Próximamente</span>
+                <span className="font-semibold text-lg text-text-secondary">Juego rápido</span>
+                <span className="text-xs text-text-secondary opacity-70">Próximamente</span>
               </div>
             </div>
           </button>
 
           <button
             onClick={() => handleActionClick('spectate')}
-            className="group flex items-center justify-between p-4 bg-neutral-800/50 border border-neutral-800 opacity-60 cursor-not-allowed rounded-xl transition-all"
+            className="group flex items-center justify-between p-4 bg-panel border border-border-color opacity-60 cursor-not-allowed rounded-xl transition-all shadow-sm"
           >
             <div className="flex items-center gap-3">
               <div className="p-2 bg-emerald-500/20 text-emerald-500 rounded-lg">
                 <Eye size={24} />
               </div>
               <div className="flex flex-col items-start">
-                <span className="font-semibold text-lg text-neutral-400">Modo espectador</span>
-                <span className="text-xs text-neutral-500">Próximamente</span>
+                <span className="font-semibold text-lg text-text-secondary">Modo espectador</span>
+                <span className="text-xs text-text-secondary opacity-70">Próximamente</span>
               </div>
             </div>
           </button>
@@ -121,14 +141,14 @@ export default function Home() {
       ) : (
         <form onSubmit={handleSubmit} className="w-full flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="text-left mb-2">
-            <h2 className="text-2xl font-bold">
+            <h2 className="text-2xl font-bold text-text-primary transition-colors">
               {selectedAction === 'create' ? 'Crear Partida' : 'Unirse a Partida'}
             </h2>
-            <p className="text-neutral-400 text-sm">Ingresa tus datos para continuar</p>
+            <p className="text-text-secondary text-sm transition-colors">Ingresa tus datos para continuar</p>
           </div>
 
           <div className="flex flex-col gap-2">
-            <label htmlFor="playerName" className="text-sm font-medium text-neutral-300 ml-1">
+            <label htmlFor="playerName" className="text-sm font-medium text-text-secondary ml-1 transition-colors">
               Tu Nombre
             </label>
             <input
@@ -139,13 +159,13 @@ export default function Home() {
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
               placeholder="Ej: Jugador1"
-              className="w-full px-4 py-3 bg-neutral-800 border border-neutral-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-neutral-500 transition-all"
+              className="w-full px-4 py-3 bg-panel border border-border-color rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-text-primary placeholder-text-secondary transition-all"
             />
           </div>
 
           {selectedAction === 'join' && (
             <div className="flex flex-col gap-2">
-              <label htmlFor="roomCode" className="text-sm font-medium text-neutral-300 ml-1">
+              <label htmlFor="roomCode" className="text-sm font-medium text-text-secondary ml-1 transition-colors">
                 Código de la Sala
               </label>
               <input
@@ -156,7 +176,7 @@ export default function Home() {
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                 placeholder="Ej: A1B2C3"
-                className="w-full px-4 py-3 bg-neutral-800 border border-neutral-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-neutral-500 uppercase transition-all tracking-widest"
+                className="w-full px-4 py-3 bg-panel border border-border-color rounded-xl focus:outline-none focus:ring-2 focus:ring-secondary focus:border-transparent text-text-primary placeholder-text-secondary uppercase transition-all tracking-widest"
               />
             </div>
           )}
@@ -165,16 +185,16 @@ export default function Home() {
             <button
               type="button"
               onClick={handleBack}
-              className="px-6 py-3 bg-neutral-700 hover:bg-neutral-600 rounded-xl font-medium transition-colors w-1/3"
+              className="px-6 py-3 bg-panel border border-border-color hover:bg-border-color rounded-xl font-medium text-text-primary transition-colors w-1/3"
             >
               Volver
             </button>
             <button
               type="submit"
-              className={`px-6 py-3 rounded-xl font-bold transition-all w-2/3 shadow-lg ${
+              className={`px-6 py-3 rounded-xl font-bold text-white transition-all w-2/3 shadow-lg hover:opacity-90 ${
                 selectedAction === 'create'
-                  ? 'bg-purple-600 hover:bg-purple-500 hover:shadow-purple-500/25'
-                  : 'bg-blue-600 hover:bg-blue-500 hover:shadow-blue-500/25'
+                  ? 'bg-primary'
+                  : 'bg-secondary'
               }`}
             >
               Continuar
