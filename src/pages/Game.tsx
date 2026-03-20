@@ -76,29 +76,38 @@ export default function Game() {
     }
   };
 
-  // Manejar el temporizador (Simplificado para el frontend mock)
+  // Calcular el tiempo restante basado en la hora absoluta del servidor (Firebase)
   useEffect(() => {
-    if (gameState.currentPhase === 'writing' || gameState.currentPhase === 'voting') {
+    if ((gameState.currentPhase === 'writing' || gameState.currentPhase === 'voting') && gameState.phaseEndTime) {
+      const calculateTimeLeft = () => {
+        const now = Date.now();
+        const diff = gameState.phaseEndTime! - now;
+        return Math.max(0, Math.ceil(diff / 1000));
+      };
+
+      // Establecer inmediatamente al entrar
+      setTimeLeft(calculateTimeLeft());
+
       const timer = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+        const remaining = calculateTimeLeft();
+        setTimeLeft(remaining);
+
+        if (remaining <= 0) {
+          clearInterval(timer);
+        }
+      }, 500); // 500ms para ser más reactivo a F5s o Alt-Tabs
+
       return () => clearInterval(timer);
     }
-  }, [gameState.currentPhase]);
+  }, [gameState.currentPhase, gameState.phaseEndTime, gameState.currentQuestionIndex]);
 
-  // Vigilar cuándo el tiempo llega a 0 para ejecutar la lógica una sola vez
+  // Vigilar cuándo el tiempo llega a 0 para ejecutar la lógica una sola vez por fase/pregunta
   useEffect(() => {
-    if (timeLeft === 0) {
+    if (timeLeft === 0 && (gameState.currentPhase === 'writing' || gameState.currentPhase === 'voting')) {
       handleTimeUp();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft]);
+  }, [timeLeft, gameState.currentPhase, gameState.currentQuestionIndex]);
 
   // Resetear estados al cambiar de fase
   useEffect(() => {
