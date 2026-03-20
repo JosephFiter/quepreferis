@@ -445,7 +445,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (gameState.currentPhase === 'writing') {
       if (gameState.players.length > 0 && gameState.questions.length >= gameState.players.length) {
         console.log(`[HOST LOGIC] ¡Todos enviaron! Cambiando la fase en Firebase a 'voting'...`);
-        const votingTimeMs = 15000;
+        const votingTimeMs = 20000;
         update(ref(db, `rooms/${activeRoomId}`), {
           currentPhase: 'voting',
           currentQuestionIndex: 0,
