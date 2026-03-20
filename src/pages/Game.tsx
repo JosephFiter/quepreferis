@@ -19,9 +19,6 @@ export default function Game() {
   // Estados Fase 2: Votación
   const [selectedVote, setSelectedVote] = useState<'A' | 'B' | null>(null);
 
-  // Prevención de doble ejecución del temporizador
-  const [handledPhaseKey, setHandledPhaseKey] = useState<string | null>(null);
-
   // Tema actual
   const currentTopic = gameState.settings.mode === 'tematica'
     ? (gameState.settings.topics[gameState.currentRound % gameState.settings.topics.length] || 'Tema Aleatorio')
@@ -81,6 +78,8 @@ export default function Game() {
 
   // Calcular el tiempo restante basado en la hora absoluta del servidor (Firebase)
   useEffect(() => {
+    let hasTriggeredTimeUp = false;
+
     if ((gameState.currentPhase === 'writing' || gameState.currentPhase === 'voting') && gameState.phaseEndTime) {
       const calculateTimeLeft = () => {
         const now = Date.now();
@@ -89,7 +88,16 @@ export default function Game() {
       };
 
       // Establecer inmediatamente al entrar
-      setTimeLeft(calculateTimeLeft());
+      const initialTime = calculateTimeLeft();
+      setTimeLeft(initialTime);
+
+      if (initialTime <= 0) {
+        if (!hasTriggeredTimeUp) {
+          hasTriggeredTimeUp = true;
+          handleTimeUp();
+        }
+        return;
+      }
 
       const timer = setInterval(() => {
         const remaining = calculateTimeLeft();
@@ -97,23 +105,17 @@ export default function Game() {
 
         if (remaining <= 0) {
           clearInterval(timer);
+          if (!hasTriggeredTimeUp) {
+            hasTriggeredTimeUp = true;
+            handleTimeUp();
+          }
         }
       }, 500); // 500ms para ser más reactivo a F5s o Alt-Tabs
 
       return () => clearInterval(timer);
     }
-  }, [gameState.currentPhase, gameState.phaseEndTime, gameState.currentQuestionIndex]);
-
-  // Vigilar cuándo el tiempo llega a 0 para ejecutar la lógica una sola vez por fase/pregunta
-  useEffect(() => {
-    const currentPhaseKey = `${gameState.currentPhase}-${gameState.currentQuestionIndex}`;
-
-    if (timeLeft === 0 && handledPhaseKey !== currentPhaseKey && (gameState.currentPhase === 'writing' || gameState.currentPhase === 'voting')) {
-      setHandledPhaseKey(currentPhaseKey);
-      handleTimeUp();
-    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, gameState.currentPhase, gameState.currentQuestionIndex, handledPhaseKey]);
+  }, [gameState.currentPhase, gameState.phaseEndTime, gameState.currentQuestionIndex]);
 
   // Resetear estados al cambiar de fase
   useEffect(() => {

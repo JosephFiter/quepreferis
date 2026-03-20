@@ -378,9 +378,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
             const diff = Math.abs(percentA - 50) * 2;
             const points = Math.round(1000 * ((100 - diff) / 100));
 
-            // Asignar puntos al autor
-            const currentScore = data.players[q.authorId]?.score || 0;
-            updates[`players/${q.authorId}/score`] = currentScore + points;
+            // Solo asignar puntos al autor si el autor sigue en la sala
+            if (data.players && data.players[q.authorId]) {
+              const currentScore = data.players[q.authorId]?.score || 0;
+              updates[`players/${q.authorId}/score`] = currentScore + points;
+            }
           }
         });
       }
