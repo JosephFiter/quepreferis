@@ -187,7 +187,13 @@ export default function Lobby() {
                     </label>
                     <select
                       value={settings.timeLimit}
-                      onChange={(e) => setSettings(s => ({ ...s, timeLimit: parseInt(e.target.value) }))}
+                      onChange={(e) => {
+                        const newTime = parseInt(e.target.value);
+                        setSettings(s => ({ ...s, timeLimit: newTime }));
+                        if (isHost) {
+                          updateSettings({ ...settings, timeLimit: newTime });
+                        }
+                      }}
                       className="w-full bg-neutral-900 border border-neutral-700 rounded-lg py-2 px-3 text-white focus:ring-2 focus:ring-purple-500 outline-none"
                     >
                       <option value="30">30s (Muy rápido)</option>

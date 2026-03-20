@@ -6,7 +6,7 @@ import { Clock, Send, CheckCircle2, AlertTriangle } from 'lucide-react';
 export default function Game() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
-  const { gameState, submitQuestion, submitVote, nextQuestion, nextRound, forceNextPhase } = useGame();
+  const { gameState, submitQuestion, submitVote, nextRound, forceNextPhase } = useGame();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const gameContext = useGame() as any; // Para acceder a _forcePhase
 
@@ -139,11 +139,6 @@ export default function Game() {
 
     setSelectedVote(option);
     submitVote(currentQ.id, option);
-
-    // Auto avanzar tras votar para agilizar el mock (en real esperaría a todos)
-    setTimeout(() => {
-      nextQuestion();
-    }, 1000);
   };
 
   // --- RENDERIZADO POR FASES ---
@@ -273,6 +268,11 @@ export default function Game() {
     }
 
     const isAuthor = currentQuestion.authorId === gameState.currentPlayerId;
+    const hasVotedOrIsAuthor = isAuthor || !!selectedVote;
+
+    const totalVotes = (currentQuestion.votesA || 0) + (currentQuestion.votesB || 0);
+    const percentA = totalVotes > 0 ? Math.round((currentQuestion.votesA / totalVotes) * 100) : 0;
+    const percentB = totalVotes > 0 ? Math.round((currentQuestion.votesB / totalVotes) * 100) : 0;
 
     return (
       <div className="flex flex-col flex-grow items-center justify-center w-full max-w-4xl mx-auto py-8 animate-in fade-in zoom-in-95 duration-500">
@@ -297,16 +297,27 @@ export default function Game() {
 
           <button
             onClick={() => handleVote('A')}
-            disabled={isAuthor || !!selectedVote}
-            className={`flex flex-col items-center justify-center text-center p-8 rounded-3xl border-4 transition-all min-h-[250px]
+            disabled={hasVotedOrIsAuthor}
+            className={`relative overflow-hidden flex flex-col items-center justify-center text-center p-8 rounded-3xl border-4 transition-all min-h-[250px]
               ${selectedVote === 'A'
-                ? 'bg-purple-600/20 border-purple-500 shadow-[0_0_30px_rgba(168,85,247,0.4)] scale-105'
-                : 'bg-neutral-800 border-neutral-700 hover:border-purple-500/50 hover:bg-neutral-800/80'}
-              ${(isAuthor || selectedVote) && selectedVote !== 'A' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                ? 'border-purple-500 shadow-[0_0_30px_rgba(168,85,247,0.4)] scale-[1.02]'
+                : 'bg-neutral-800 border-neutral-700'}
+              ${!hasVotedOrIsAuthor ? 'hover:border-purple-500/50 hover:bg-neutral-800/80 cursor-pointer' : 'cursor-default'}
             `}
           >
-            <span className="text-xl font-bold text-purple-400 mb-4">Opción A</span>
-            <span className="text-2xl font-black text-white">{currentQuestion.optionA}</span>
+            {hasVotedOrIsAuthor && (
+               <div
+                 className="absolute bottom-0 left-0 w-full bg-purple-600/30 transition-all duration-500 ease-out z-0"
+                 style={{ height: `${percentA}%` }}
+               />
+            )}
+            <div className="relative z-10 flex flex-col items-center">
+              <span className="text-xl font-bold text-purple-400 mb-4">Opción A</span>
+              <span className="text-2xl font-black text-white mb-2">{currentQuestion.optionA}</span>
+              {hasVotedOrIsAuthor && (
+                <span className="text-4xl font-black text-purple-300 mt-4 animate-in slide-in-from-bottom-2">{percentA}%</span>
+              )}
+            </div>
           </button>
 
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-neutral-900 border-4 border-neutral-700 rounded-full flex items-center justify-center font-black text-2xl text-neutral-500 z-10 hidden md:flex">
@@ -315,16 +326,27 @@ export default function Game() {
 
           <button
             onClick={() => handleVote('B')}
-            disabled={isAuthor || !!selectedVote}
-            className={`flex flex-col items-center justify-center text-center p-8 rounded-3xl border-4 transition-all min-h-[250px]
+            disabled={hasVotedOrIsAuthor}
+            className={`relative overflow-hidden flex flex-col items-center justify-center text-center p-8 rounded-3xl border-4 transition-all min-h-[250px]
               ${selectedVote === 'B'
-                ? 'bg-blue-600/20 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.4)] scale-105'
-                : 'bg-neutral-800 border-neutral-700 hover:border-blue-500/50 hover:bg-neutral-800/80'}
-              ${(isAuthor || selectedVote) && selectedVote !== 'B' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                ? 'border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.4)] scale-[1.02]'
+                : 'bg-neutral-800 border-neutral-700'}
+              ${!hasVotedOrIsAuthor ? 'hover:border-blue-500/50 hover:bg-neutral-800/80 cursor-pointer' : 'cursor-default'}
             `}
           >
-            <span className="text-xl font-bold text-blue-400 mb-4">Opción B</span>
-            <span className="text-2xl font-black text-white">{currentQuestion.optionB}</span>
+            {hasVotedOrIsAuthor && (
+               <div
+                 className="absolute bottom-0 left-0 w-full bg-blue-600/30 transition-all duration-500 ease-out z-0"
+                 style={{ height: `${percentB}%` }}
+               />
+            )}
+            <div className="relative z-10 flex flex-col items-center">
+              <span className="text-xl font-bold text-blue-400 mb-4">Opción B</span>
+              <span className="text-2xl font-black text-white mb-2">{currentQuestion.optionB}</span>
+              {hasVotedOrIsAuthor && (
+                <span className="text-4xl font-black text-blue-300 mt-4 animate-in slide-in-from-bottom-2">{percentB}%</span>
+              )}
+            </div>
           </button>
         </div>
 
@@ -338,8 +360,8 @@ export default function Game() {
 
         {/* Mensaje de espera post-voto */}
         {selectedVote && !isAuthor && (
-          <div className="mt-8 text-xl font-semibold text-neutral-400 animate-pulse">
-            Voto registrado. Esperando a los demás...
+          <div className="mt-8 text-xl font-semibold text-neutral-400">
+            Voto registrado. Viendo resultados en vivo...
           </div>
         )}
 

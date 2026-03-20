@@ -411,7 +411,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!activeRoomId) return;
     console.log(`[ACTION] forceNextPhase convocado. Fase actual en mi cliente es: ${gameState.currentPhase}`);
     if (gameState.currentPhase === 'writing') {
-      const votingTimeMs = 15000;
+      const votingTimeMs = 20000;
       update(ref(db, `rooms/${activeRoomId}`), {
         currentPhase: 'voting',
         currentQuestionIndex: 0,
@@ -419,7 +419,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }).catch(e => console.error(e));
     } else if (gameState.currentPhase === 'voting') {
       if (gameState.currentQuestionIndex < gameState.questions.length - 1) {
-        const votingTimeMs = 15000;
+        const votingTimeMs = 20000;
         update(ref(db, `rooms/${activeRoomId}`), {
           currentQuestionIndex: gameState.currentQuestionIndex + 1,
           phaseEndTime: Date.now() + votingTimeMs
