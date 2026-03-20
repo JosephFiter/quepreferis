@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGame } from '../context/GameContext';
-import { Settings, Users, Copy, CheckCircle2, Play, Plus, X } from 'lucide-react';
+import { Settings, Users, Copy, CheckCircle2, Play, Plus, X, ArrowLeft } from 'lucide-react';
 
 export default function Lobby() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
-  const { gameState, startGame, updateSettings } = useGame();
+  const { gameState, startGame, updateSettings, leaveRoom } = useGame();
 
   const currentPlayer = gameState.players.find(p => p.id === gameState.currentPlayerId);
   const isHost = currentPlayer?.isHost || false;
@@ -43,6 +43,11 @@ export default function Lobby() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const handleLeaveRoom = async () => {
+    await leaveRoom();
+    navigate('/');
   };
 
   const handleStartGame = () => {
@@ -87,9 +92,18 @@ export default function Lobby() {
     <div className="flex flex-col flex-grow max-w-4xl mx-auto w-full gap-6 animate-in fade-in duration-300">
 
       {/* HEADER: Código de la sala */}
-      <div className="bg-neutral-800 border border-neutral-700 rounded-2xl p-6 shadow-lg flex flex-col md:flex-row items-center justify-between gap-4">
-        <div>
-          <h2 className="text-sm uppercase tracking-wider text-neutral-400 font-semibold mb-1">Código de Sala</h2>
+      <div className="bg-neutral-800 border border-neutral-700 rounded-2xl p-6 shadow-lg flex flex-col md:flex-row items-center justify-between gap-4 relative">
+        <button
+          onClick={handleLeaveRoom}
+          className="absolute top-4 right-4 md:static md:order-first flex items-center gap-2 text-neutral-400 hover:text-red-400 transition-colors"
+          title="Salir de la sala"
+        >
+          <ArrowLeft size={20} />
+          <span className="hidden md:inline font-medium">Salir</span>
+        </button>
+
+        <div className="flex-grow">
+          <h2 className="text-sm uppercase tracking-wider text-neutral-400 font-semibold mb-1 text-center md:text-left">Código de Sala</h2>
           <div className="flex items-center gap-3">
             <span className="text-4xl font-black tracking-widest text-white">{roomId}</span>
             <button

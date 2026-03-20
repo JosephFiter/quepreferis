@@ -51,6 +51,7 @@ interface GameContextType {
   gameState: GameState;
   createRoom: (playerName: string, settings: GameSettings) => string;
   joinRoom: (roomId: string, playerName: string) => Promise<boolean>;
+  leaveRoom: () => Promise<void>;
   startGame: () => void;
   submitQuestion: (optionA: string, optionB: string, topic?: string) => void;
   submitVote: (questionId: string, option: 'A' | 'B') => void;
@@ -80,9 +81,55 @@ const defaultState: GameState = {
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export function GameProvider({ children }: { children: ReactNode }) {
-  const [gameState, setGameState] = useState<GameState>(defaultState);
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  const [localPlayerId, setLocalPlayerId] = useState<string | null>(null);
+  const [gameState, setGameState] = useState<GameState>(() => {
+    // Intentar recuperar el estado de la sesión si el usuario recargó la página
+    if (typeof window !== 'undefined') {
+      const savedSession = sessionStorage.getItem('quepreferis_session');
+      if (savedSession) {
+        try {
+          const parsed = JSON.parse(savedSession);
+          return {
+            ...defaultState,
+            roomId: parsed.roomId,
+            currentPlayerId: parsed.playerId,
+          };
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return defaultState;
+  });
+
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const savedSession = sessionStorage.getItem('quepreferis_session');
+      return savedSession ? JSON.parse(savedSession).roomId : null;
+    }
+    return null;
+  });
+
+  const [localPlayerId, setLocalPlayerId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const savedSession = sessionStorage.getItem('quepreferis_session');
+      return savedSession ? JSON.parse(savedSession).playerId : null;
+    }
+    return null;
+  });
+
+  // Guardar en sessionStorage cuando entramos a una sala
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (activeRoomId && localPlayerId) {
+        sessionStorage.setItem('quepreferis_session', JSON.stringify({
+          roomId: activeRoomId,
+          playerId: localPlayerId
+        }));
+      } else {
+        sessionStorage.removeItem('quepreferis_session');
+      }
+    }
+  }, [activeRoomId, localPlayerId]);
 
   // Escuchar cambios en la sala actual de Firebase
   useEffect(() => {
@@ -209,6 +256,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     alert("La sala no existe");
     return false;
+  };
+
+  const leaveRoom = async () => {
+    if (activeRoomId && localPlayerId) {
+      // Intentar eliminar al jugador de la base de datos (fire and forget, por si cierran rápido)
+      set(ref(db, `rooms/${activeRoomId}/players/${localPlayerId}`), null).catch(() => {});
+    }
+
+    // Limpiar estado local y sesión
+    setGameState(defaultState);
+    setActiveRoomId(null);
+    setLocalPlayerId(null);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('quepreferis_session');
+    }
   };
 
   const updateSettings = (settings: GameSettings) => {
@@ -398,6 +460,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       gameState,
       createRoom,
       joinRoom,
+      leaveRoom,
       startGame,
       submitQuestion,
       submitVote,
