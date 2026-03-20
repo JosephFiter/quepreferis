@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
-type Theme = 'dark-purple' | 'light-blue' | 'monochrome' | 'neon-green';
+type Theme = 'dark-purple' | 'light-blue' | 'monochrome' | 'neon-green' | 'custom';
 
 interface ThemeContextType {
   theme: Theme;
@@ -15,8 +15,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Aplicar la clase al document element
-    document.documentElement.classList.remove('theme-dark-purple', 'theme-light-blue', 'theme-monochrome', 'theme-neon-green');
+    document.documentElement.classList.remove('theme-dark-purple', 'theme-light-blue', 'theme-monochrome', 'theme-neon-green', 'theme-custom');
     document.documentElement.classList.add(`theme-${theme}`);
+
+    // Si NO es custom, limpiamos los estilos inline del documentElement por si acaso
+    if (theme !== 'custom') {
+      document.documentElement.style.removeProperty('--bg-base');
+      document.documentElement.style.removeProperty('--bg-panel');
+      document.documentElement.style.removeProperty('--color-primary');
+      document.documentElement.style.removeProperty('--color-secondary');
+      document.documentElement.style.removeProperty('--text-primary');
+      document.documentElement.style.removeProperty('--text-secondary');
+      document.documentElement.style.removeProperty('--border-color');
+    }
   }, [theme]);
 
   return (
