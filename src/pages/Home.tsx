@@ -53,15 +53,53 @@ export default function Home() {
     setRoomCode('');
   };
 
+  const [showCustomTheme, setShowCustomTheme] = useState(false);
+
   const toggleTheme = () => {
-    const themes: ('dark-purple' | 'light-blue' | 'monochrome' | 'neon-green')[] = ['dark-purple', 'light-blue', 'monochrome', 'neon-green'];
+    const themes: ('dark-purple' | 'light-blue' | 'monochrome' | 'neon-green' | 'custom')[] = ['dark-purple', 'light-blue', 'monochrome', 'neon-green', 'custom'];
     const currentIndex = themes.indexOf(theme);
     const nextIndex = (currentIndex + 1) % themes.length;
     setTheme(themes[nextIndex]);
+    if (themes[nextIndex] === 'custom') {
+      setShowCustomTheme(true);
+    } else {
+      setShowCustomTheme(false);
+    }
+  };
+
+  const handleCustomColorChange = (variable: string, value: string) => {
+    document.documentElement.style.setProperty(variable, value);
   };
 
   return (
     <div className="flex flex-col items-center justify-center flex-grow p-4 w-full max-w-md mx-auto relative">
+
+      {/* Selector Custom Theme (para diseñadores) */}
+      {showCustomTheme && (
+        <div className="absolute top-16 right-0 bg-panel border border-border-color p-4 rounded-xl shadow-2xl z-50 flex flex-col gap-2 animate-in fade-in zoom-in w-64">
+          <h3 className="text-sm font-bold text-text-primary mb-2 border-b border-border-color pb-2">Diseñador de Colores</h3>
+
+          {[
+            { label: 'Fondo Principal', var: '--bg-base', default: '#171717' },
+            { label: 'Fondo Paneles', var: '--bg-panel', default: '#262626' },
+            { label: 'Acento Primario', var: '--color-primary', default: '#a855f7' },
+            { label: 'Acento Secundario', var: '--color-secondary', default: '#3b82f6' },
+            { label: 'Texto Principal', var: '--text-primary', default: '#ffffff' },
+            { label: 'Texto Secundario', var: '--text-secondary', default: '#a3a3a3' },
+            { label: 'Bordes', var: '--border-color', default: '#404040' },
+          ].map(c => (
+            <div key={c.var} className="flex items-center justify-between text-xs">
+              <label className="text-text-secondary">{c.label}</label>
+              <input
+                type="color"
+                defaultValue={c.default}
+                onChange={(e) => handleCustomColorChange(c.var, e.target.value)}
+                className="w-8 h-8 rounded cursor-pointer bg-transparent border-none p-0"
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Botón temporal de cambio de tema */}
       <button
