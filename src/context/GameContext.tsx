@@ -42,6 +42,7 @@ export interface GameState {
   currentRound: number;
   questions: Question[]; // Preguntas de la ronda actual
   currentQuestionIndex: number; // Para la fase de votación
+  phaseEndTime: number | null; // El timestamp exacto donde termina la fase
 
   // Usuario actual (solo en cliente local)
   currentPlayerId: string | null;
@@ -75,6 +76,7 @@ const defaultState: GameState = {
   currentRound: 1,
   questions: [],
   currentQuestionIndex: 0,
+  phaseEndTime: null,
   currentPlayerId: null,
 };
 
@@ -169,6 +171,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           currentRound: data.currentRound || 1,
           questions: questionsArray,
           currentQuestionIndex: data.currentQuestionIndex || 0,
+          phaseEndTime: data.phaseEndTime || null,
           currentPlayerId: localPlayerId,
         });
       } else {
@@ -196,6 +199,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       currentPhase: 'waiting',
       currentRound: 1,
       currentQuestionIndex: 0,
+      phaseEndTime: null,
       players: {
         [newPlayerId]: {
           name: playerName,
@@ -280,9 +284,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const startGame = () => {
     if (!activeRoomId) return;
+    const writingTimeMs = gameState.settings.timeLimit * 1000;
     update(ref(db, `rooms/${activeRoomId}`), {
       currentPhase: 'writing',
-      questions: null // Limpiar preguntas si hubiera
+      questions: null, // Limpiar preguntas si hubiera
+      phaseEndTime: Date.now() + writingTimeMs
     });
   };
 
@@ -338,12 +344,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!activeRoomId) return;
 
     if (gameState.currentQuestionIndex < gameState.questions.length - 1) {
+      const votingTimeMs = 15000;
       update(ref(db, `rooms/${activeRoomId}`), {
-        currentQuestionIndex: gameState.currentQuestionIndex + 1
+        currentQuestionIndex: gameState.currentQuestionIndex + 1,
+        phaseEndTime: Date.now() + votingTimeMs
       });
     } else {
       update(ref(db, `rooms/${activeRoomId}`), {
-        currentPhase: 'round_ranking'
+        currentPhase: 'round_ranking',
+        phaseEndTime: null
       });
     }
   };
@@ -378,12 +387,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       // 2. Prepare next round or finish
       if (data.currentRound < data.settings.rounds) {
+        const writingTimeMs = (data.settings.timeLimit || 60) * 1000;
         updates['currentRound'] = data.currentRound + 1;
         updates['currentPhase'] = 'writing';
         updates['currentQuestionIndex'] = 0;
         updates['questions'] = null; // Limpiar preguntas de la ronda anterior
+        updates['phaseEndTime'] = Date.now() + writingTimeMs;
       } else {
         updates['currentPhase'] = 'finished';
+        updates['phaseEndTime'] = null;
       }
 
       await update(roomRef, updates);
@@ -399,12 +411,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!activeRoomId) return;
     console.log(`[ACTION] forceNextPhase convocado. Fase actual en mi cliente es: ${gameState.currentPhase}`);
     if (gameState.currentPhase === 'writing') {
-      update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 }).catch(e => console.error(e));
+      const votingTimeMs = 15000;
+      update(ref(db, `rooms/${activeRoomId}`), {
+        currentPhase: 'voting',
+        currentQuestionIndex: 0,
+        phaseEndTime: Date.now() + votingTimeMs
+      }).catch(e => console.error(e));
     } else if (gameState.currentPhase === 'voting') {
       if (gameState.currentQuestionIndex < gameState.questions.length - 1) {
-        update(ref(db, `rooms/${activeRoomId}`), { currentQuestionIndex: gameState.currentQuestionIndex + 1 }).catch(e => console.error(e));
+        const votingTimeMs = 15000;
+        update(ref(db, `rooms/${activeRoomId}`), {
+          currentQuestionIndex: gameState.currentQuestionIndex + 1,
+          phaseEndTime: Date.now() + votingTimeMs
+        }).catch(e => console.error(e));
       } else {
-        update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'round_ranking' }).catch(e => console.error(e));
+        update(ref(db, `rooms/${activeRoomId}`), {
+          currentPhase: 'round_ranking',
+          phaseEndTime: null
+        }).catch(e => console.error(e));
       }
     }
   };
@@ -419,7 +443,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (gameState.currentPhase === 'writing') {
       if (gameState.players.length > 0 && gameState.questions.length >= gameState.players.length) {
         console.log(`[HOST LOGIC] ¡Todos enviaron! Cambiando la fase en Firebase a 'voting'...`);
-        update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'voting', currentQuestionIndex: 0 }).catch(e => console.error("Error updating firebase:", e));
+        const votingTimeMs = 15000;
+        update(ref(db, `rooms/${activeRoomId}`), {
+          currentPhase: 'voting',
+          currentQuestionIndex: 0,
+          phaseEndTime: Date.now() + votingTimeMs
+        }).catch(e => console.error("Error updating firebase:", e));
       }
     } else if (gameState.currentPhase === 'voting' && gameState.questions.length > 0) {
       const currentQ = gameState.questions[gameState.currentQuestionIndex || 0];
@@ -430,10 +459,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
         if (expectedVotes > 0 && currentVotes >= expectedVotes) {
           if (gameState.currentQuestionIndex < gameState.questions.length - 1) {
             console.log(`[HOST LOGIC] Todos votaron en la pregunta actual. Pasando a la siguiente...`);
-            update(ref(db, `rooms/${activeRoomId}`), { currentQuestionIndex: gameState.currentQuestionIndex + 1 }).catch(e => console.error(e));
+            const votingTimeMs = 15000;
+            update(ref(db, `rooms/${activeRoomId}`), {
+              currentQuestionIndex: gameState.currentQuestionIndex + 1,
+              phaseEndTime: Date.now() + votingTimeMs
+            }).catch(e => console.error(e));
           } else {
             console.log(`[HOST LOGIC] Todos votaron en la ÚLTIMA pregunta. Pasando a round_ranking...`);
-            update(ref(db, `rooms/${activeRoomId}`), { currentPhase: 'round_ranking' }).catch(e => console.error(e));
+            update(ref(db, `rooms/${activeRoomId}`), {
+              currentPhase: 'round_ranking',
+              phaseEndTime: null
+            }).catch(e => console.error(e));
           }
         }
       }
