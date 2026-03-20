@@ -19,6 +19,9 @@ export default function Game() {
   // Estados Fase 2: Votación
   const [selectedVote, setSelectedVote] = useState<'A' | 'B' | null>(null);
 
+  // Prevención de doble ejecución del temporizador
+  const [handledPhaseKey, setHandledPhaseKey] = useState<string | null>(null);
+
   // Tema actual
   const currentTopic = gameState.settings.mode === 'tematica'
     ? (gameState.settings.topics[gameState.currentRound % gameState.settings.topics.length] || 'Tema Aleatorio')
@@ -103,11 +106,14 @@ export default function Game() {
 
   // Vigilar cuándo el tiempo llega a 0 para ejecutar la lógica una sola vez por fase/pregunta
   useEffect(() => {
-    if (timeLeft === 0 && (gameState.currentPhase === 'writing' || gameState.currentPhase === 'voting')) {
+    const currentPhaseKey = `${gameState.currentPhase}-${gameState.currentQuestionIndex}`;
+
+    if (timeLeft === 0 && handledPhaseKey !== currentPhaseKey && (gameState.currentPhase === 'writing' || gameState.currentPhase === 'voting')) {
+      setHandledPhaseKey(currentPhaseKey);
       handleTimeUp();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, gameState.currentPhase, gameState.currentQuestionIndex]);
+  }, [timeLeft, gameState.currentPhase, gameState.currentQuestionIndex, handledPhaseKey]);
 
   // Resetear estados al cambiar de fase
   useEffect(() => {
